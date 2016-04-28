@@ -27,144 +27,8 @@ webInterfaceDir="/var/www/html/admin"
 piholeGitUrl="https://github.com/pi-hole/pi-hole.git"
 piholeFilesDir="/etc/.pihole"
 
-
-# Find the rows and columns
-rows=$(tput lines)
-columns=$(tput cols)
-
-# Divide by two so the dialogs take up half of the screen, which looks nice.
-r=$(( rows / 2 ))
-c=$(( columns / 2 ))
-
-
-# Find IP used to route to outside world
-
-IPv4dev=$(ip route get 8.8.8.8 | awk '{for(i=1;i<=NF;i++)if($i~/dev/)print $(i+1)}')
-IPv4addr=$(ip -o -f inet addr show dev "$IPv4dev" | awk '{print $4}' | awk 'END {print}')
-IPv4gw=$(ip route get 8.8.8.8 | awk '{print $3}')
-
-availableInterfaces=$(ip -o link | awk '{print $2}' | grep -v "lo" | cut -d':' -f1)
 dhcpcdFile=/etc/dhcpcd.conf
 
-######## FIRST CHECK ########
-# Must be root to install
-echo ":::"
-if [[ $EUID -eq 0 ]];then
-	echo "::: You are root."
-else
-	echo "::: sudo will be used for the install."
-	# Check if it is actually installed
-	# If it isn't, exit because the install cannot complete
-	if [[ $(dpkg-query -s sudo) ]];then
-		export SUDO="sudo"
-	else
-		echo "::: Please install sudo or run this as root."
-		exit 1
-	fi
-fi
-
-
-####### FUNCTIONS ##########
-spinner()
-{
-	local pid=$1
-    local delay=0.50
-    local spinstr='/-\|'
-    while [ "$(ps a | awk '{print $1}' | grep "$pid")" ]; do
-		local temp=${spinstr#?}
-        printf " [%c]  " "$spinstr"
-        local spinstr=$temp${spinstr%"$temp"}
-        sleep $delay
-        printf "\b\b\b\b\b\b"
-    done
-    printf "    \b\b\b\b"
-}
-
-backupLegacyPihole() {
-	# This function detects and backups the pi-hole v1 files.  It will not do anything to the current version files.
-	if [[ -f /etc/dnsmasq.d/adList.conf ]];then
-		echo "::: Original Pi-hole detected.  Initiating sub space transport"
-		$SUDO mkdir -p /etc/pihole/original/
-		$SUDO mv /etc/dnsmasq.d/adList.conf /etc/pihole/original/adList.conf."$(date "+%Y-%m-%d")"
-		$SUDO mv /etc/dnsmasq.conf /etc/pihole/original/dnsmasq.conf."$(date "+%Y-%m-%d")"
-		$SUDO mv /etc/resolv.conf /etc/pihole/original/resolv.conf."$(date "+%Y-%m-%d")"
-		$SUDO mv /etc/lighttpd/lighttpd.conf /etc/pihole/original/lighttpd.conf."$(date "+%Y-%m-%d")"
-		$SUDO mv /var/www/pihole/index.html /etc/pihole/original/index.html."$(date "+%Y-%m-%d")"
-		if [ ! -d /opt/pihole ]; then
-			$SUDO mkdir /opt/pihole
-			$SUDO chown "$USER":root /opt/pihole
-			$SUDO chmod u+srwx /opt/pihole
-		fi
-		$SUDO mv /opt/pihole/gravity.sh /etc/pihole/original/gravity.sh."$(date "+%Y-%m-%d")"
-	else
-		:
-	fi
-}
-
-welcomeDialogs() {
-	# Display the welcome dialog
-	whiptail --msgbox --backtitle "Welcome" --title "Pi-hole automated installer" "This installer will transform your Raspberry Pi into a network-wide ad blocker!" $r $c
-
-	# Support for a part-time dev
-	whiptail --msgbox --backtitle "Plea" --title "Free and open source" "The Pi-hole is free, but powered by your donations:  http://pi-hole.net/donate" $r $c
-
-	# Explain the need for a static address
-	whiptail --msgbox --backtitle "Initating network interface" --title "Static IP Needed" "The Pi-hole is a SERVER so it needs a STATIC IP ADDRESS to function properly.
-	
-In the next section, you can choose to use your current network settings (DHCP) or to manually edit them." $r $c
-}
-
-
-verifyFreeDiskSpace() {
-	# 50MB is the minimum space needed (45MB install (includes web admin bootstrap/jquery libraries etc) + 5MB one day of logs.)
-	requiredFreeBytes=51200
-
-	existingFreeBytes=$(df -lk / 2>&1 | awk '{print $4}' | head -2 | tail -1)
-	if ! [[ "$existingFreeBytes" =~ ^([0-9])+$ ]]; then
-		existingFreeBytes=$(df -lk /dev 2>&1 | awk '{print $4}' | head -2 | tail -1)
-	fi
-
-	if [[ $existingFreeBytes -lt $requiredFreeBytes ]]; then
-		whiptail --msgbox --backtitle "Insufficient Disk Space" --title "Insufficient Disk Space" "\nYour system appears to be low on disk space. pi-hole recomends a minimum of $requiredFreeBytes Bytes.\nYou only have $existingFreeBytes Free.\n\nIf this is a new install you may need to expand your disk.\n\nTry running:\n    'sudo raspi-config'\nChoose the 'expand file system option'\n\nAfter rebooting, run this installation again.\n\ncurl -L install.pi-hole.net | bash\n" $r $c
-		echo "$existingFreeBytes is less than $requiredFreeBytes"
-		echo "Insufficient free space, exiting..."
-		exit 1
-	fi
-}
-
-
-chooseInterface() {
-	# Turn the available interfaces into an array so it can be used with a whiptail dialog
-	interfacesArray=()
-	firstloop=1
-
-	while read -r line
-	do
-		mode="OFF"
-		if [[ $firstloop -eq 1 ]]; then
-			firstloop=0
-			mode="ON"
-		fi
-		interfacesArray+=("$line" "available" "$mode")
-	done <<< "$availableInterfaces"
-
-	# Find out how many interfaces are available to choose from
-	interfaceCount=$(echo "$availableInterfaces" | wc -l)
-	chooseInterfaceCmd=(whiptail --separate-output --radiolist "Choose An Interface" $r $c $interfaceCount)
-	chooseInterfaceOptions=$("${chooseInterfaceCmd[@]}" "${interfacesArray[@]}" 2>&1 >/dev/tty)
-	if [[ $? = 0 ]]; then
-		for desiredInterface in $chooseInterfaceOptions
-		do
-			piholeInterface=$desiredInterface
-			echo "::: Using interface: $piholeInterface"
-			echo "${piholeInterface}" > /tmp/piholeINT
-		done
-	else
-		echo "::: Cancel selected, exiting...."
-		exit 1
-	fi
-
-}
 
 cleanupIPv6() {
 	# Removes IPv6 indicator file if we are not using IPv6
@@ -281,13 +145,8 @@ It is also possible to use a DHCP reservation, but if you are going to do that, 
 	fi
 }
 
-setDHCPCD() {
-	# Append these lines to dhcpcd.conf to enable a static IP
-	echo "::: interface $piholeInterface
-	static ip_address=$IPv4addr
-	static routers=$IPv4gw
-	static domain_name_servers=$IPv4gw" | $SUDO tee -a $dhcpcdFile >/dev/null
-}
+#set dhcpcd.conf
+
 
 setStaticIPv4() {
 	# Tries to set the IPv4 address
@@ -319,97 +178,8 @@ function valid_ip()
 	fi
 	return $stat
 }
-
-setDNS(){
-	DNSChoseCmd=(whiptail --separate-output --radiolist "Select Upstream DNS Provider. To use your own, select Custom." $r $c 6)
-	DNSChooseOptions=(Google "" on
-			OpenDNS "" off
-			Level3 "" off
-			Norton "" off
-			Comodo "" off
-			Custom "" off)
-	DNSchoices=$("${DNSChoseCmd[@]}" "${DNSChooseOptions[@]}" 2>&1 >/dev/tty)
-	if [[ $? = 0 ]];then
-		case $DNSchoices in
-		Google)
-			echo "::: Using Google DNS servers."
-			piholeDNS1="8.8.8.8"
-			piholeDNS2="8.8.4.4"
-			;;
-		OpenDNS)
-			echo "::: Using OpenDNS servers."
-			piholeDNS1="208.67.222.222"
-			piholeDNS2="208.67.220.220"
-			;;
-		Level3)
-			echo "::: Using Level3 servers."
-			piholeDNS1="4.2.2.1"
-			piholeDNS2="4.2.2.2"
-			;;
-		Norton)
-			echo "::: Using Norton ConnectSafe servers."
-			piholeDNS1="199.85.126.10"
-			piholeDNS2="199.85.127.10"
-			;;
-		Comodo)
-			echo "::: Using Comodo Secure servers."
-			piholeDNS1="8.26.56.26"
-			piholeDNS2="8.20.247.20"
-			;;
-		Custom)
-			until [[ $DNSSettingsCorrect = True ]]
-			do
-				strInvalid="Invalid"
-				if [ ! $piholeDNS1 ]; then
-					if [ ! $piholeDNS2 ]; then
-						prePopulate=""
-					else
-						prePopulate=", $piholeDNS2"
-					fi
-				elif  [ $piholeDNS1 ] && [ ! $piholeDNS2 ]; then
-					prePopulate="$piholeDNS1"
-				elif [ $piholeDNS1 ] && [ $piholeDNS2 ]; then
-					prePopulate="$piholeDNS1, $piholeDNS2"
-				fi
-				piholeDNS=$(whiptail --backtitle "Specify Upstream DNS Provider(s)"  --inputbox "Enter your desired upstream DNS provider(s), seperated by a comma.\n\nFor example '8.8.8.8, 8.8.4.4'" $r $c "$prePopulate" 3>&1 1>&2 2>&3)
-				if [[ $? = 0 ]];then
-					piholeDNS1=$(echo "$piholeDNS" | sed 's/[, \t]\+/,/g' | awk -F, '{print$1}')
-					piholeDNS2=$(echo "$piholeDNS" | sed 's/[, \t]\+/,/g' | awk -F, '{print$2}')
-					if ! valid_ip "$piholeDNS1" || [ ! "$piholeDNS1" ]; then
-						piholeDNS1=$strInvalid
-					fi
-					if ! valid_ip "$piholeDNS2" && [ "$piholeDNS2" ]; then
-						piholeDNS2=$strInvalid
-					fi
-				else
-					echo "::: Cancel selected, exiting...."
-					exit 1
-				fi
-				if [[ $piholeDNS1 == "$strInvalid" ]] || [[ $piholeDNS2 == "$strInvalid" ]]; then
-					whiptail --msgbox --backtitle "Invalid IP" --title "Invalid IP" "One or both entered IP addresses were invalid. Please try again.\n\n    DNS Server 1:   $piholeDNS1\n    DNS Server 2:   $piholeDNS2" $r $c
-					if [[ $piholeDNS1 == "$strInvalid" ]]; then
-						piholeDNS1=""
-					fi
-					if [[ $piholeDNS2 == "$strInvalid" ]]; then
-						piholeDNS2=""
-					fi
-					DNSSettingsCorrect=False
-				else
-					if (whiptail --backtitle "Specify Upstream DNS Provider(s)" --title "Upstream DNS Provider(s)" --yesno "Are these settings correct?\n    DNS Server 1:   $piholeDNS1\n    DNS Server 2:   $piholeDNS2" $r $c) then
-						DNSSettingsCorrect=True
-					else
-						# If the settings are wrong, the loop continues
-						DNSSettingsCorrect=False
-					fi
-				fi
-		done
-		;;
-	esac
-	else
-		echo "::: Cancel selected. Exiting..."
-		exit 1
-	fi
-}
+	piholeDNS1="8.8.8.8"
+	piholeDNS2="8.8.4.4"
 
 versionCheckDNSmasq(){
 	# Check if /etc/dnsmasq.conf is from pihole.  If so replace with an original and install new in .d directory
@@ -638,13 +408,9 @@ installPiholeWeb() {
 	fi
 }
 
-installCron() {
-	# Install the cron job
-	$SUDO echo ":::"
-	$SUDO echo -n "::: Installing latest Cron script..."
-	$SUDO cp /etc/.pihole/advanced/pihole.cron /etc/cron.d/pihole
-	$SUDO echo " done!"
-}
+ echo -n "::: Installing latest Cron script..."
+ cp /etc/.pihole/advanced/pihole.cron /etc/cron.d/pihole
+
 
 runGravity() {
 	# Rub gravity.sh to build blacklists
@@ -658,17 +424,7 @@ runGravity() {
 	$SUDO /opt/pihole/gravity.sh
 }
 
-setUser(){
-	# Check if user pihole exists and create if not
-	echo "::: Checking if user 'pihole' exists..."
-	if id -u pihole > /dev/null 2>&1; then
-		echo "::: User 'pihole' already exists"
-	else
-		echo "::: User 'pihole' doesn't exist.  Creating..."
-		$SUDO useradd -r -s /usr/sbin/nologin pihole
-	fi
-}
-
+ useradd -r -s /usr/sbin/nologin pihole
 installPihole() {
 	# Install base files and web interface
 	checkForDependencies # done
@@ -692,30 +448,10 @@ installPihole() {
 	runGravity
 }
 
-displayFinalMessage() {
-	# Final completion message to user
-	whiptail --msgbox --backtitle "Make it so." --title "Installation Complete!" "Configure your devices to use the Pi-hole as their DNS server using:
-
-IPv4:	$IPv4addr
-IPv6:	$piholeIPv6
-
-If you set a new IP address, you should restart the Pi.
-
-The install log is in /etc/pihole." $r $c
-}
-
 ######## SCRIPT ############
 # Start the installer
 $SUDO mkdir -p /etc/pihole/
-welcomeDialogs
 
-# Verify there is enough disk space for the install
-verifyFreeDiskSpace
-
-# Just back up the original Pi-hole right away since it won't take long and it gets it out of the way
-backupLegacyPihole
-# Find interfaces and let the user choose one
-chooseInterface
 # Let the user decide if they want to block ads over IPv4 and/or IPv6
 use4andor6
 
@@ -728,20 +464,5 @@ installPihole | tee $tmpLog
 # Move the log file into /etc/pihole for storage
 $SUDO mv $tmpLog $instalLogLoc
 
-displayFinalMessage
-
-echo -n "::: Restarting services..."
-# Start services
-$SUDO service dnsmasq restart
-$SUDO service lighttpd start
 echo " done."
-
-echo ":::"
-echo "::: Installation Complete! Configure your devices to use the Pi-hole as their DNS server using:"
-echo ":::     $IPv4addr"
-echo ":::     $piholeIPv6"
-echo ":::"
-echo "::: If you set a new IP address, you should restart the Pi."
-echo "::: "
-echo "::: The install log is located at: /etc/pihole/install.log"
 
