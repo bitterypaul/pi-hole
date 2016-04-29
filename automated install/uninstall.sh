@@ -58,6 +58,76 @@ chmod 777 /usr/local/bin/pihole
 
 #skipping dnsmasq config
 
+###########################################################################
+##WARNING::::::  PARTIAL IMPLEMENTATION:::::::::::::::::::::::::::::::::::
+
+dnsFile1="/etc/dnsmasq.conf"
+	dnsFile2="/etc/dnsmasq.conf.orig"
+	dnsSearch="addn-hosts=/etc/pihole/gravity.list"
+	defaultFile="/etc/.pihole/advanced/dnsmasq.conf.original"
+	newFileToInstall="/etc/.pihole/advanced/01-pihole.conf"
+	newFileFinalLocation="/etc/dnsmasq.d/01-pihole.conf"
+
+	if [ -f $dnsFile1 ]; then
+		echo -n ":::    Existing dnsmasq.conf found..."
+		if grep -q $dnsSearch $dnsFile1; then
+			echo " it is from a previous pi-hole install."
+			echo -n ":::    Backing up dnsmasq.conf to dnsmasq.conf.orig..."
+			$SUDO mv -f $dnsFile1 $dnsFile2
+			echo " done."
+			echo -n ":::    Restoring default dnsmasq.conf..."
+			$SUDO cp $defaultFile $dnsFile1
+			echo " done."
+		else
+			echo " it is not a pi-hole file, leaving alone!"
+		fi
+	else
+		echo -n ":::    No dnsmasq.conf found.. restoring default dnsmasq.conf..."
+		$SUDO cp $defaultFile $dnsFile1
+		echo " done."
+	fi
+
+	echo -n ":::    Copying 01-pihole.conf to /etc/dnsmasq.d/01-pihole.conf..."
+	$SUDO cp $newFileToInstall $newFileFinalLocation
+	echo " done."
+	$SUDO sed -i "s/@INT@/$piholeInterface/" $newFileFinalLocation
+	if [[ "$piholeDNS1" != "" ]]; then
+		$SUDO sed -i "s/@DNS1@/$piholeDNS1/" $newFileFinalLocation
+	else
+		$SUDO sed -i '/^server=@DNS1@/d' $newFileFinalLocation
+	fi
+	if [[ "$piholeDNS2" != "" ]]; then
+		$SUDO sed -i "s/@DNS2@/$piholeDNS2/" $newFileFinalLocation
+	else
+		$SUDO sed -i '/^server=@DNS2@/d' $newFileFinalLocation
+	fi
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+###########################################################################
 #lighttpd config
 mv /etc/lighttpd/lighttpd.conf /etc/lighttpd/lighttpd.conf.orig
 cp lighttpd.conf /etc/lighttpd/lighttpd.conf
