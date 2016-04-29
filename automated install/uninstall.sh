@@ -1,42 +1,39 @@
 
 sudo bash
-apt-get install dnsutils bc toilet figlet dnsmasq lighttpd php5-common php5-cgi php5 git curl unzip wget
-
 
 touch /etc/pihole/.useIPv6
+#set interface as wlan0.i.e, modify etc/network/interfaces.
+#getstaticipv4settings.i.e, copy dhcpcd.conf to req location.
+#setDNS.i.e, modify dnsmasq
+#
+#
+#
+#
 
-cp pihole /usr/local/bin/pihole
-chmod 755 /usr/local/bin/pihole
+apt-get install dnsutils bc toilet figlet dnsmasq lighttpd php5-common php5-cgi php5 git curl unzip wget
 
+#stop services
+service lighttpd stop
+service dnsmasq stop
 
+#add user pihole
+useradd -r -s /usr/sbin/nologin pihole
 
+#continue the same logic as in installPihole()
 mkdir -p /etc/pihole/
-
- useradd -r -s /usr/sbin/nologin pihole
-	mkdir -p /var/www/html
-	chown www-data:www-data /var/www/html
-	chmod 775 /var/www/html
-	usermod -a -G www-data pihole
-	lighty-enable-mod fastcgi fastcgi-php > /dev/null
-
-mkdir /var/www/html/pihole
-cp /etc/.pihole/advanced/index.* /var/www/html/pihole/.
- cp /etc/.pihole/advanced/pihole.cron /etc/cron.d/pihole
-
-cp pihole /usr/local/bin/pihole
-chmod 755 /usr/local/bin/pihole
-mkdir /etc/lighttpd
- chown "$USER":root /etc/lighttpd
-		mv /etc/lighttpd/lighttpd.conf /etc/lighttpd/lighttpd.conf.orig
-cp /etc/.pihole/advanced/lighttpd.conf /etc/lighttpd/lighttpd.conf
-
-touch /var/log/pihole.log
-chmod 777 /var/log/pihole.log
+mkdir -p /var/www/html
+chown www-data:www-data /var/www/html
+chmod 775 /var/www/html
+usermod -a -G www-data pihole
+  #lighty-enable-mod fastcgi fastcgi-php > /dev/null
+  #be more verborse
+lighty-enable-mod fastcgi fastcgi-php
 
 
-
-
- useradd -r -s /usr/sbin/nologin pihole
+########branching
+##edit:git repos for pi-hole cannot be used since we don't declare variables.
+#copy n paste only.
+ 
 
 
 
@@ -46,5 +43,4 @@ chmod 777 /var/log/pihole.log
 
 
 
-sh /opt/pihole/gravity.sh
 
