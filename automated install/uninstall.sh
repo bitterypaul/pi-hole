@@ -2,7 +2,9 @@
 sudo bash
 
 
-touch /etc/pihole/.useIPv6
+mkdir -p /etc/pihole/
+
+#touch /etc/pihole/.useIPv6
 #set interface as wlan0.i.e, modify etc/network/interfaces.
 #getstaticipv4settings.i.e, copy dhcpcd.conf to req location.
 #setDNS.i.e, modify dnsmasq
@@ -10,6 +12,7 @@ touch /etc/pihole/.useIPv6
 #
 #
 #
+
 apt-get update
 
 apt-get install dnsutils bc toilet figlet dnsmasq lighttpd php5-common php5-cgi php5 git curl unzip wget
@@ -20,8 +23,6 @@ service dnsmasq stop
 
 #add user pihole
 useradd -r -s /usr/sbin/nologin pihole
-
-
 
 #continue the same logic as in installPihole()
 mkdir -p /etc/pihole/
@@ -40,18 +41,16 @@ lighty-enable-mod fastcgi fastcgi-php
  
 #installscripts()
 mkdir /opt/pihole
-#beware of variable user!!!!!!!!!!!!!!!!
-chown "$USER":root /opt/pihole
-chmod u+srwx /opt/pihole
+chmod 777 /opt/pihole
 
-cp Scripts/gravity.sh /opt/pihole/gravity.sh
-cp Scripts/chronometer.sh /opt/pihole/chronometer.sh
-cp Scripts/whitelist.sh /opt/pihole/whitelist.sh
-cp Scripts/blacklist.sh /opt/pihole/blacklist.sh
-cp Scripts/piholeDebug.sh /opt/pihole/piholeDebug.sh
-cp Scripts/piholeLogFlush.sh /opt/pihole/piholeLogFlush.sh
-cp Scripts/updateDashboard.sh /opt/pihole/updateDashboard.sh
-chmod 777 /opt/pihole/{gravity,chronometer,whitelist,blacklist,piholeLogFlush,updateDashboard}.sh
+cp gravity.sh /opt/pihole/gravity.sh
+cp chronometer.sh /opt/pihole/chronometer.sh
+cp whitelist.sh /opt/pihole/whitelist.sh
+cp blacklist.sh /opt/pihole/blacklist.sh
+cp piholeDebug.sh /opt/pihole/piholeDebug.sh
+cp piholeLogFlush.sh /opt/pihole/piholeLogFlush.sh
+cp updateDashboard.sh /opt/pihole/updateDashboard.sh
+chmod 777 -R /opt/pihole
 cp /etc/.pihole/pihole /usr/local/bin/pihole
 chmod 777 /usr/local/bin/pihole
 
@@ -60,13 +59,6 @@ chmod 777 /usr/local/bin/pihole
 
 ###########################################################################
 ##WARNING::::::  PARTIAL IMPLEMENTATION:::::::::::::::::::::::::::::::::::
-
-dnsFile1="/etc/dnsmasq.conf"
-	dnsFile2="/etc/dnsmasq.conf.orig"
-	dnsSearch="addn-hosts=/etc/pihole/gravity.list"
-	defaultFile="/etc/.pihole/advanced/dnsmasq.conf.original"
-	newFileToInstall="/etc/.pihole/advanced/01-pihole.conf"
-	newFileFinalLocation="/etc/dnsmasq.d/01-pihole.conf"
 
 	if [ -f $dnsFile1 ]; then
 		echo -n ":::    Existing dnsmasq.conf found..."
@@ -106,29 +98,9 @@ dnsFile1="/etc/dnsmasq.conf"
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 ###########################################################################
 #lighttpd config
+mkdir /etc/lighttpd
 mv /etc/lighttpd/lighttpd.conf /etc/lighttpd/lighttpd.conf.orig
 cp lighttpd.conf /etc/lighttpd/lighttpd.conf
 chmod 777 /etc/lighttpd/lighttpd.conf
@@ -145,13 +117,11 @@ chown dnsmasq:root /var/log/pihole.log
 #installpiholeweb
 mkdir /var/www/html/pihole
 mv /var/www/html/index.lighttpd.html /var/www/html/index.lighttpd.orig
-cp index.* /var/www/html/pihole/.
-
-
+cp index.html /var/www/html/pihole/index.html
+cp index.js /var/www/html/pihole/index.js
 
 #install cron
 cp pihole.cron /etc/cron.d/pihole
-
 
 #run gravity.sh.
 
