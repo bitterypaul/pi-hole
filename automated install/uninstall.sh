@@ -51,9 +51,45 @@ cp Scripts/blacklist.sh /opt/pihole/blacklist.sh
 cp Scripts/piholeDebug.sh /opt/pihole/piholeDebug.sh
 cp Scripts/piholeLogFlush.sh /opt/pihole/piholeLogFlush.sh
 cp Scripts/updateDashboard.sh /opt/pihole/updateDashboard.sh
-chmod 755 /opt/pihole/{gravity,chronometer,whitelist,blacklist,piholeLogFlush,updateDashboard}.sh
+chmod 777 /opt/pihole/{gravity,chronometer,whitelist,blacklist,piholeLogFlush,updateDashboard}.sh
 cp /etc/.pihole/pihole /usr/local/bin/pihole
-chmod 755 /usr/local/bin/pihole
+chmod 777 /usr/local/bin/pihole
+
+
+#skipping dnsmasq config
+
+#lighttpd config
+mv /etc/lighttpd/lighttpd.conf /etc/lighttpd/lighttpd.conf.orig
+cp lighttpd.conf /etc/lighttpd/lighttpd.conf
+chmod 777 /etc/lighttpd/lighttpd.conf
+
+
+
+#creating log file
+
+touch /var/log/pihole.log
+chmod 777 /var/log/pihole.log
+chown dnsmasq:root /var/log/pihole.log
+
+
+#installpiholeweb
+mkdir /var/www/html/pihole
+mv /var/www/html/index.lighttpd.html /var/www/html/index.lighttpd.orig
+cp index.* /var/www/html/pihole/.
+
+
+
+#install cron
+cp pihole.cron /etc/cron.d/pihole
+
+
+#run gravity.sh.
+
+sh /opt/pihole/gravity.sh
+
+
+
+
 
 
 
